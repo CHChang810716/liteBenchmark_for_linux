@@ -1,3 +1,6 @@
+#ifndef TIME_DATA_HPP
+#define TIME_DATA_HPP 
+
 #include <vector>
 #include <cmath>
 #include <initializer_list>
@@ -56,3 +59,4 @@ public:
                 return res;
         }
 };
+#endif
