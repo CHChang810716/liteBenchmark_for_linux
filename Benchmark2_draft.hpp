@@ -45,35 +45,54 @@ protected:
         split(s, delim, elems);
         return elems;
     }
-    void exec_program()
-    {
-        const pstreams::pmode streams =
-        pstreams::pstdout|pstreams::pstderr;
-        redi::pstream ps(argv[0], argv, streams);
-        std::cout << "exec over\n";
-        std::string buf;
+    #ifdef __APPLE__
+        void exec_program()
+        {
+            const pstreams::pmode streams =
+            pstreams::pstdout|pstreams::pstderr;
+            redi::pstream ps(argv[0], argv, streams);
+            std::cout << "exec over\n";
+            std::string buf;
 
-        while (std::getline(ps.out(), buf))
-        {
-            //std::cout << "stdout:";
-            *program_std_out << buf <<'\n';
+            while (std::getline(ps.out(), buf))
+            {
+                //std::cout << "stdout:";
+                *program_std_out << buf <<'\n';
+            }
+            ps.clear();
         }
-        ps.clear();
-        std::cout << "stdout over\n";
-        while (std::getline(ps.err(), buf))
+    #elif __linux
+        void exec_program()
         {
-            if( !buf.compare("=timestart=") )
-                    break;
-            *program_err_out << buf <<'\n';
+            const pstreams::pmode streams =
+            pstreams::pstdout|pstreams::pstderr;
+            redi::pstream ps(argv[0], argv, streams);
+            std::cout << "exec over\n";
+            std::string buf;
+
+            while (std::getline(ps.out(), buf))
+            {
+                //std::cout << "stdout:";
+                *program_std_out << buf <<'\n';
+            }
+            ps.clear();
+            std::cout << "stdout over\n";
+            while (std::getline(ps.err(), buf))
+            {
+                if( !buf.compare("=timestart=") )
+                        break;
+                *program_err_out << buf <<'\n';
+            }
+            std::cout << "stderr over\n";
+            std::getline(ps.err(), buf);
+            realTime.push_back(std::stod (buf));
+            std::getline(ps.err(), buf);
+            userTime.push_back(std::stod (buf));
+            std::getline(ps.err(), buf);
+            systemTime.push_back(std::stod (buf));
         }
-        std::cout << "stderr over\n";
-        std::getline(ps.err(), buf);
-        realTime.push_back(std::stod (buf));
-        std::getline(ps.err(), buf);
-        userTime.push_back(std::stod (buf));
-        std::getline(ps.err(), buf);
-        systemTime.push_back(std::stod (buf));
-    }
+    #endif
+    
 
 public:
     Time_data userTime;
@@ -84,7 +103,10 @@ public:
     :cmd_flag(false)
     {
         argv.push_back("time");
-        argv.push_back("-f=timestart=\n%e\n%U\n%S\n");
+        #ifdef __APPLE__
+        #elif __linux
+            argv.push_back("-f=timestart=\n%e\n%U\n%S\n");
+        #endif
     }
 
     /*Benchmark_kernal(std::string cmd)
