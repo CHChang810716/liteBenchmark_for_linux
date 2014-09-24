@@ -13,10 +13,11 @@
 using redi::pstreams;
 
 
-template < class out_type, class err_type >
+template < class out_type = std::ostream, class err_type = std::ostream >
 class Benchmark_kernal
 {
 protected:
+    bool cmd_flag;
     pstreams::argv_type argv;
     out_type* program_std_out;
     err_type* program_err_out;
@@ -44,6 +45,35 @@ protected:
         split(s, delim, elems);
         return elems;
     }
+    void exec_program()
+    {
+        const pstreams::pmode streams =
+        pstreams::pstdout|pstreams::pstderr;
+        redi::pstream ps(argv[0], argv, streams);
+        std::cout << "exec over\n";
+        std::string buf;
+
+        while (std::getline(ps.out(), buf))
+        {
+            //std::cout << "stdout:";
+            *program_std_out << buf <<'\n';
+        }
+        ps.clear();
+        std::cout << "stdout over\n";
+        while (std::getline(ps.err(), buf))
+        {
+            if( !buf.compare("=timestart=") )
+                    break;
+            *program_err_out << buf <<'\n';
+        }
+        std::cout << "stderr over\n";
+        std::getline(ps.err(), buf);
+        realTime.push_back(std::stod (buf));
+        std::getline(ps.err(), buf);
+        userTime.push_back(std::stod (buf));
+        std::getline(ps.err(), buf);
+        systemTime.push_back(std::stod (buf));
+    }
 
 public:
     Time_data userTime;
@@ -51,23 +81,22 @@ public:
     Time_data realTime;
 
     Benchmark_kernal()
+    :cmd_flag(false)
     {
-        program_std_out = &std::cout;
-        program_err_out = &std::cerr;
-
         argv.push_back("time");
         argv.push_back("-f=timestart=\n%e\n%U\n%S\n");
     }
 
-    Benchmark_kernal(std::string cmd)
+    /*Benchmark_kernal(std::string cmd)
+    :cmd_flag(false)
     {
         argv.push_back("time");
         argv.push_back("-f=timestart=\n%e\n%U\n%S\n");
-        set_cmd(cmd);
-    }
+    }*/
 
-    void set_cmd(std::string cmd)
+    virtual void set_cmd(std::string cmd)
     {
+        std::cout<<"kernal\n";
         if(cmd_flag)
         {
             //throw a exception here
@@ -77,53 +106,13 @@ public:
         std::vector<std::string> arg_set = split(cmd,' ');
         for(auto it = arg_set.begin(); it != arg_set.end(); it++)
         {
-            if( it->compare(">")==0 )
-            {
-                it++;
-                program_std_out = new std::ofstream (it->c_str());
-                fout_flag = true;
-            }
-            else if( it->compare("<")==0 )
-            {
-                //input implementat
-            }
-            else if( it->compare("&>")==0 )
-            {
-                //merge output implementat
-            }
-            else
-            {
-                argv.push_back(*it);
-            }
+            argv.push_back(*it);
         }
         cmd_flag = true;
     }
-    void execute()
+    virtual void execute()
     {
-        const pstreams::pmode streams =
-        pstreams::pstdout|pstreams::pstderr;
-        redi::pstream ps(argv[0], argv, streams);
-        std::string buf;
-
-        while (std::getline(ps.out(), buf))
-        {
-            //std::cout << "stdout:";
-            *program_std_out << buf <<'\n';
-        }
-        ps.clear();
-        while (std::getline(ps.err(), buf))
-        {
-            if( !buf.compare("=timestart=") )
-                    break;
-            *program_err_out << buf <<'\n';
-        }
-
-        std::getline(ps.err(), buf);
-        realTime.push_back(std::stod (buf));
-        std::getline(ps.err(), buf);
-        userTime.push_back(std::stod (buf));
-        std::getline(ps.err(), buf);
-        systemTime.push_back(std::stod (buf));
+        exec_program();
     }
 
     Benchmark_kernal operator+ (Benchmark_kernal& op)
@@ -142,23 +131,20 @@ public:
     }
 };
 
-template < class out_type, class err_type >
+template < class out_type = std::ostream, class err_type = std::ostream >
 class Benchmark
 :public Benchmark_kernal< out_type, err_type >
 {
-
-private:
-    bool cmd_flag;
-
 public:
     Benchmark()
     : Benchmark_kernal< out_type, err_type > ()
-    , cmd_flag  (false)
     {}
 
     Benchmark(std::string cmd)
     : Benchmark_kernal< out_type, err_type > (cmd)
-    {}
+    {
+        this->set_cmd(cmd);
+    }
     
     ~Benchmark()
     {}
@@ -168,34 +154,73 @@ template < class err_type >
 class Benchmark< std::ofstream, err_type >
 :public Benchmark_kernal< std::ofstream, err_type >
 {
-
-private:
-    bool cmd_flag;
     std::string fname;
-
 public:
     Benchmark()
     : Benchmark_kernal< std::ofstream, err_type > ()
-    , cmd_flag  (false)
-    {}
+    {
+        this->program_std_out = new std::ofstream();
+        this->program_err_out = &std::cerr;
+    }
 
     Benchmark(std::string cmd)
-    : Benchmark_kernal< std::ofstream, err_type > (cmd)
-    {}
+    : Benchmark_kernal< std::ofstream, err_type > ()
+    {
+        this->program_std_out = new std::ofstream();
+        this->program_err_out = &std::cerr;
+        set_cmd(cmd);
+    }
 
     void execute()
     {
-        program_std_out -> open();
-        execute();
+        this->program_std_out -> open(fname);
+        std::cout << "pos open\n";
+        this->exec_program();
+        std::cout << "pos exec\n";
+        this->program_std_out -> close();
+
     }
 
+    virtual void set_cmd(std::string cmd)
+    {
+        std::cout<<"fout\n";
+        if(this->cmd_flag)
+        {
+            //throw a exception here
+            return ; 
+        }
+                
+        std::vector<std::string> arg_set = this->split(cmd,' ');
+        for(auto it = arg_set.begin(); it < arg_set.end(); it++)
+        {
+            if( it->compare(">")==0 )
+            {
+                it ++;
+                fname = *it;
+                std::cout << "file name : " << fname << '\n';
+            }
+            else if( it->compare("<")==0 )
+            {
+                //input implementat
+            }
+            else if( it->compare("&>")==0 )
+            {
+                //merge output implementat
+            }
+            else
+            {   
+                std::cout << *it << '\n';
+                this->argv.push_back(*it);
+            }
+            std::cout << "line 204\n";
+        }
+        this->cmd_flag = true;
+        std::cout << "line 206\n";
+    }
+    
     ~Benchmark()
     {
-        if(fout_flag)
-        {
-            program_std_out->close();
-            delete program_std_out;
-        }
+        delete this->program_std_out;
     }
 };
 #endif

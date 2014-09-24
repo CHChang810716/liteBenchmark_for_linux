@@ -3,6 +3,7 @@
 
 int main(int argc, char const *argv[])
 {
-	Benchmark benchmark("test_runable/sum_loop > tmp");
+	Benchmark< std::ofstream >  benchmark("test_runable/sum_loop > tmp");
+    benchmark.execute();
 	return 0;
 }
